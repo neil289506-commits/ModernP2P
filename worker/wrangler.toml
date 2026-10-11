@@ -1,0 +1,16 @@
+name = "modernp2p-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "CodeRegistry"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CodeRegistry"]
+
+# The id is filled in by scripts/ensure-kv.mjs during deployment.
+[[kv_namespaces]]
+binding = "RATE"
+id = "__KV_NAMESPACE_ID__"

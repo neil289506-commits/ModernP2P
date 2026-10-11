@@ -2,23 +2,30 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QTimer>
 
-#include "core/CodeGenerator.h"
+#include "app/AppController.h"
 
 int main(int argc, char *argv[])
 {
+    // Background pages must not be throttled or the PeerJS host would stall.
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+            "--disable-background-timer-throttling --disable-renderer-backgrounding");
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName("ModernP2P");
-    QGuiApplication::setOrganizationName("ModernP2P");
-    QQuickStyle::setStyle("Basic");
+    QGuiApplication::setApplicationName(QStringLiteral("ModernP2P"));
+    QGuiApplication::setOrganizationName(QStringLiteral("ModernP2P"));
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    p2p::app::AppController controller;
 
     QQmlApplicationEngine engine;
-    // Placeholder: the code is not yet verified against Cloudflare (next PR).
-    engine.rootContext()->setContextProperty("localCode", p2p::core::CodeGenerator::generate());
-
-    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
-                     &app, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
+    engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
+                     [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("ModernP2P", "Main");
 
+    QTimer::singleShot(0, &controller, &p2p::app::AppController::start);
     return app.exec();
 }

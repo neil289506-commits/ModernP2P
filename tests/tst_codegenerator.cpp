@@ -1,5 +1,5 @@
-#include <QtTest>
 #include <QSet>
+#include <QtTest>
 
 #include "core/CodeGenerator.h"
 
@@ -35,9 +35,12 @@ private slots:
         QVERIFY(!CodeGenerator::isValid("ABCDEFGHI"));
     }
 
-    void normalizesInput()
+    void normalizesInput() { QCOMPARE(CodeGenerator::normalize("  ab12cd34 "), QString("AB12CD34")); }
+
+    void peerIdMatchesWorkerFormat()
     {
-        QCOMPARE(CodeGenerator::normalize("  ab12cd34 "), QString("AB12CD34"));
+        const QString id = CodeGenerator::makePeerId("AB12CD34");
+        QVERIFY(QRegularExpression("^mp2p-AB12CD34-[a-z0-9]{12}$").match(id).hasMatch());
     }
 };
 

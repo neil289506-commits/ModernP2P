@@ -4,20 +4,18 @@
 
 namespace p2p::core {
 
-/// Generates the 8-character alphanumeric device code (A-Z, 0-9).
+/// The 8-character device code (A-Z, 0-9).
 class CodeGenerator
 {
 public:
     static constexpr int kCodeLength = 8;
 
-    /// Returns a new random code using the system CSPRNG.
     static QString generate();
-
-    /// True if `code` is exactly 8 characters of A-Z / 0-9 (case-sensitive).
     static bool isValid(const QString &code);
-
-    /// Trims and upper-cases user input so codes are typed case-insensitively.
+    /// Trims and upper-cases user input so codes can be typed in any case.
     static QString normalize(const QString &input);
+    /// Per-launch PeerJS id: "mp2p-<CODE>-<12 random a-z0-9>".
+    static QString makePeerId(const QString &code);
 };
 
 } // namespace p2p::core
