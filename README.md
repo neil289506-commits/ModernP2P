@@ -25,7 +25,7 @@ exposing it to anyone who knows a code would be a privacy leak.
 | `src/network` | Cloudflare Worker client + notification WebSocket |
 | `src/transfer` | PeerJS bridge (hidden WebEngine page) and the transfer protocol engine |
 | `src/app` | `AppController` wiring everything to the QML UI |
-| `qml/`, `web/` | UI and the PeerJS host page |
+| `src/qml`, `web/` | UI and the PeerJS host page |
 | `worker/` | Cloudflare Worker (TypeScript, Durable Object, KV rate limiting) |
 | `third_party/peerjs` | Vendored PeerJS 1.5.4 (MIT) |
 

@@ -23,7 +23,7 @@ if(P2P_BUILD_APP)
     qt_add_qml_module(ModernP2P
         URI ModernP2P
         VERSION 1.0
-        QML_FILES ../qml/Main.qml
+        QML_FILES qml/Main.qml
     )
 
     # PeerJS host page and the vendored PeerJS build, served from qrc:/web/.
