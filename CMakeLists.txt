@@ -18,6 +18,10 @@ endif()
 find_package(Qt6 ${P2P_QT_MIN} REQUIRED COMPONENTS ${_qt_components})
 qt_standard_project_setup()
 
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 enable_testing()
 add_subdirectory(src)
 add_subdirectory(tests)

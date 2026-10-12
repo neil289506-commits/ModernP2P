@@ -7,6 +7,7 @@
 #include <QWebEngineProfile>
 #include <QWebEngineSettings>
 #include <QDebug>
+#include <utility>
 
 namespace p2p::transfer {
 

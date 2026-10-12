@@ -40,7 +40,14 @@ jobs:
           -DP2P_API_BASE="$env:API_BASE_URL"
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: |
+          cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            # Surface compiler errors as annotations so they are visible without opening the log.
+            Select-String -Path build.log -Pattern 'error [A-Z]+[0-9]+|CMake Error|fatal error|error:' |
+              Select-Object -First 10 | ForEach-Object { Write-Host "::error::$($_.Line.Trim())" }
+            exit 1
+          }
 
       - name: Test
         env:
