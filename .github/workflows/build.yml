@@ -1,0 +1,78 @@
+name: Build (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["worker/**", "**.md"]
+  pull_request:
+    paths-ignore: ["worker/**", "**.md"]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6.11.0
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.11.0
+          arch: win64_msvc2022_64
+          modules: qtwebengine qtwebchannel qtwebsockets qtpositioning
+          cache: true
+          # aqtinstall 3.3.0 lacks Qt 6.11 support; pinned commit until 3.4.0 is out.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@151f6f436c2f5a5ceb7890ad970ca6f3b4d83512
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          -DP2P_API_BASE="$env:API_BASE_URL"
+
+      - name: Build
+        run: |
+          cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            # Surface compiler errors as annotations so they are visible without opening the log.
+            Select-String -Path build.log -Pattern 'error [A-Z]+[0-9]+|CMake Error|fatal error|error:' |
+              Select-Object -First 10 | ForEach-Object { Write-Host "::error::$($_.Line.Trim())" }
+            exit 1
+          }
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        run: |
+          try {
+            New-Item -ItemType Directory -Force dist/ModernP2P | Out-Null
+            Copy-Item build/Release/ModernP2P.exe dist/ModernP2P/
+            $log = & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir src/qml dist/ModernP2P/ModernP2P.exe 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "windeployqt failed: $($log | Select-Object -Last 5)" }
+            Compress-Archive -Path dist/ModernP2P -DestinationPath ModernP2P-win64.zip
+            if (-not (Test-Path ModernP2P-win64.zip)) { throw "zip missing" }
+          } catch {
+            Write-Host "::error::$($_.Exception.Message)"
+            Get-ChildItem -Recurse build -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 8 |
+              ForEach-Object { Write-Host "::error::found $($_.FullName)" }
+            exit 1
+          }
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ModernP2P-win64
+          path: ModernP2P-win64.zip
+          if-no-files-found: error

@@ -5,4 +5,7 @@ build-*/
 .idea/
 *.user
 CMakeUserPresets.json
-.DS_Store
+node_modules/
+.wrangler/
+.dev.vars
+dist/
