@@ -56,15 +56,21 @@ jobs:
 
       - name: Package
         run: |
-          New-Item -ItemType Directory -Force dist/ModernP2P | Out-Null
-          Copy-Item build/src/Release/ModernP2P.exe dist/ModernP2P/
-          $log = & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir src/qml dist/ModernP2P/ModernP2P.exe 2>&1
-          $code = $LASTEXITCODE
-          Write-Host "::warning::windeployqt exit code $code"
-          $log | Select-Object -Last 12 | ForEach-Object { Write-Host "::warning::$($_.ToString().Trim())" }
-          Get-ChildItem dist/ModernP2P | Select-Object -First 25 | ForEach-Object { Write-Host "::notice::$($_.Name)" }
-          Compress-Archive -Path dist/ModernP2P -DestinationPath ModernP2P-win64.zip
-          if (-not (Test-Path ModernP2P-win64.zip)) { Write-Host "::error::zip missing"; exit 1 }
+          try {
+            New-Item -ItemType Directory -Force dist/ModernP2P | Out-Null
+            Copy-Item build/src/Release/ModernP2P.exe dist/ModernP2P/
+            $log = & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir src/qml dist/ModernP2P/ModernP2P.exe 2>&1
+            $code = $LASTEXITCODE
+            Write-Host "::warning::windeployqt exit code $code"
+            $log | Select-Object -Last 12 | ForEach-Object { Write-Host "::warning::$($_.ToString().Trim())" }
+            Compress-Archive -Path dist/ModernP2P -DestinationPath ModernP2P-win64.zip
+            if (-not (Test-Path ModernP2P-win64.zip)) { throw "zip missing" }
+          } catch {
+            Write-Host "::error::$($_.Exception.Message)"
+            Get-ChildItem -Recurse build -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 8 |
+              ForEach-Object { Write-Host "::error::found $($_.FullName)" }
+            exit 1
+          }
           exit 0
 
       - uses: actions/upload-artifact@v4
