@@ -1,4 +1,5 @@
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -16,6 +17,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("ModernP2P"));
     QGuiApplication::setOrganizationName(QStringLiteral("ModernP2P"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/icon.png")));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     p2p::app::AppController controller;

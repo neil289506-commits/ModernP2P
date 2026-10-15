@@ -40,6 +40,15 @@ if(P2P_BUILD_APP)
         FILES ${CMAKE_SOURCE_DIR}/third_party/peerjs/peerjs.min.js
     )
 
+    qt_add_resources(ModernP2P icons
+        PREFIX "/icons"
+        BASE ${CMAKE_SOURCE_DIR}/resources
+        FILES ${CMAKE_SOURCE_DIR}/resources/icon.png
+    )
+    if(WIN32)
+        target_sources(ModernP2P PRIVATE app.rc)   # embeds the .exe icon
+    endif()
+
     target_compile_definitions(ModernP2P PRIVATE P2P_API_BASE="${P2P_API_BASE}")
     target_link_libraries(ModernP2P PRIVATE
         p2p_core

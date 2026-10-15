@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(ModernP2P VERSION 0.1.0 LANGUAGES CXX)
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
