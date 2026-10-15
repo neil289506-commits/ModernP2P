@@ -10,6 +10,7 @@ set(P2P_API_BASE "" CACHE STRING "Cloudflare Worker base URL baked into the app"
 # Minimum Qt version (CI uses 6.11.0; lower it only for local experiments).
 set(P2P_QT_MIN 6.11 CACHE STRING "Minimum Qt version")
 option(P2P_BUILD_APP "Build the GUI application (needs WebEngine)" ON)
+option(P2P_BUILD_SCREENSHOTS "Build the tool that renders README screenshots with demo data" OFF)
 
 set(_qt_components Core Network WebSockets Test)
 if(P2P_BUILD_APP)
@@ -25,3 +26,6 @@ endif()
 enable_testing()
 add_subdirectory(src)
 add_subdirectory(tests)
+if(P2P_BUILD_SCREENSHOTS)
+    add_subdirectory(tools/screenshots)
+endif()

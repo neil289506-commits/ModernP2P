@@ -120,6 +120,7 @@ ApplicationWindow {
                     width: ListView.view.width
                     spacing: 2
                     RowLayout {
+                        Layout.minimumHeight: 36
                         Label { text: (model.sending ? "↑ " : "↓ ") + model.name; elide: Text.ElideMiddle; Layout.fillWidth: true }
                         Label {
                             text: model.state + (model.state === "Transferring" && model.speed > 0 ? " · " + root.fmtSize(model.speed) + "/s" : "")
@@ -149,6 +150,7 @@ ApplicationWindow {
 
             TextField {
                 id: peerCode
+                objectName: "peerCode"
                 placeholderText: qsTr("Peer code")
                 maximumLength: 8
                 font.family: "Consolas"
@@ -183,6 +185,7 @@ ApplicationWindow {
 
     Popup {
         id: requestsPopup
+        objectName: "requestsPopup"
         modal: true
         anchors.centerIn: Overlay.overlay
         width: Math.min(root.width - 48, 520)
