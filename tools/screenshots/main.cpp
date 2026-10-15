@@ -1,4 +1,4 @@
-// Usage: p2p_screenshots <scene> <Main.qml> <out.png>
+// Usage: p2p_screenshots <scene> <Main.qml> <out.png> [dark]
 // Scenes: ready | staged | transfer | requests
 // Uses the real list models and UI, but a mock controller filled with demo data.
 // Run with QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software.
@@ -42,6 +42,10 @@ public:
     QObject *m_requests = nullptr;
     QObject *m_transfers = nullptr;
 
+signals:
+    void requestArrived();
+
+public:
     Q_INVOKABLE void setDownloadDir(const QUrl &) {}
     Q_INVOKABLE void connectToPeer(const QString &) {}
     Q_INVOKABLE void acceptRequest(const QString &) {}
@@ -72,6 +76,7 @@ int main(int argc, char *argv[])
     const QString scene = argv[1];
     const QString qmlFile = argv[2];
     const QString outFile = argv[3];
+    const bool dark = argc > 4 && QString(argv[4]) == QLatin1String("dark");
 
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     QGuiApplication app(argc, argv);
@@ -118,6 +123,7 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("app"), &mock);
+    engine.rootContext()->setContextProperty(QStringLiteral("forceDark"), dark);
     engine.load(QUrl::fromLocalFile(qmlFile));
     if (engine.rootObjects().isEmpty())
         return 3;
