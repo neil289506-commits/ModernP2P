@@ -14,7 +14,7 @@
 
 namespace p2p::transfer {
 
-class PeerBridge;
+class PeerTransport;
 
 struct FileSpec
 {
@@ -37,7 +37,7 @@ public:
     static constexpr int kWindow = 4;                 ///< chunks in flight to the page
     static constexpr int kConnectTimeoutMs = 30'000;
 
-    TransferEngine(PeerBridge *bridge, models::TransferModel *model, QObject *parent = nullptr);
+    TransferEngine(PeerTransport *bridge, models::TransferModel *model, QObject *parent = nullptr);
 
     void setDownloadDir(const QString &dir) { m_downloadDir = dir; }
     QString downloadDir() const { return m_downloadDir; }
@@ -46,8 +46,9 @@ public:
     /// these files) are accepted, once.
     void expectIncoming(const QString &reqId, const QString &fromCode, const QString &fromPeerId,
                         const QList<FileSpec> &files);
+    /// `names[i]` is the (relative) name announced for `paths[i]`, e.g. "Album/a.jpg".
     void startSend(const QString &reqId, const QString &peerId, const QString &toCode,
-                   const QStringList &paths);
+                   const QStringList &paths, const QStringList &names);
     void cancel(const QString &transferId);
 
 signals:
@@ -59,7 +60,7 @@ private:
     struct OutSession
     {
         QString cid, reqId, peerCode;
-        QStringList paths, tids;
+        QStringList paths, names, tids;
         int idx = -1;
         bool opened = false, eof = false, endSent = false, finished = false;
         std::unique_ptr<QFile> file;
@@ -79,6 +80,7 @@ private:
         QCryptographicHash hash{QCryptographicHash::Sha256};
         qint64 received = 0;
         QString partPath, finalPath;
+        QHash<QString, QString> roots;   // announced top-level folder -> unique local folder
         QElapsedTimer clock, progress;
         bool allOk = true;
     };
@@ -104,7 +106,7 @@ private:
     void report(const QString &tid, qint64 done, models::TransferModel::State state, QElapsedTimer &clock,
                 QElapsedTimer &throttle, bool force);
 
-    PeerBridge *m_bridge;
+    PeerTransport *m_bridge;
     models::TransferModel *m_model;
     QString m_downloadDir;
     int m_counter = 0;

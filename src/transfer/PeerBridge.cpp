@@ -36,7 +36,7 @@ protected:
 } // namespace
 
 PeerBridge::PeerBridge(QObject *parent)
-    : QObject(parent)
+    : PeerTransport(parent)
 {
     m_profile = new QWebEngineProfile(this); // off-the-record: nothing is written to disk
     m_page = new BridgePage(m_profile, this);

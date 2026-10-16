@@ -1,8 +1,13 @@
 #include "AppController.h"
 
 #include "core/CodeGenerator.h"
+#include "core/Logger.h"
 
+#include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
+#include <QFileInfo>
+#include <QProcess>
 #include <QJsonArray>
 #include <QSettings>
 #include <QStandardPaths>
@@ -10,6 +15,9 @@
 
 #ifndef P2P_API_BASE
 #define P2P_API_BASE ""
+#endif
+#ifndef P2P_VERSION
+#define P2P_VERSION "0.0.0"
 #endif
 
 namespace p2p::app {
@@ -21,11 +29,20 @@ using network::ApiResult;
 namespace {
 constexpr int kMaxClaimAttempts = 20;
 constexpr int kRetryMs = 5000;
+
+QString dataFile(const QString &name)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir().mkpath(dir);
+    return dir + QLatin1Char('/') + name;
+}
 } // namespace
 
 AppController::AppController(QObject *parent)
     : QObject(parent)
     , m_engine(&m_bridge, &m_transfers)
+    , m_history(dataFile(QStringLiteral("history.json")))
+    , m_blocked(dataFile(QStringLiteral("blocked.json")))
 {
     QSettings settings;
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
@@ -70,6 +87,26 @@ AppController::AppController(QObject *parent)
     });
 
     connect(&m_engine, &transfer::TransferEngine::statusMessage, this, &AppController::setStatus);
+    connect(&m_transfers, &models::TransferModel::finished, this,
+            [this](const QString &name, qint64 size, bool sending, const QString &peer,
+                   const QString &state, const QString &error, const QString &path) {
+                models::HistoryModel::Entry e;
+                e.name = name;
+                e.size = size;
+                e.sending = sending;
+                e.peer = peer;
+                e.result = state;
+                e.error = error;
+                e.path = path;
+                e.when = QDateTime::currentDateTime();
+                m_history.add(e);
+            });
+    connect(&m_updates, &network::UpdateChecker::updateAvailable, this,
+            [this](const QString &version, const QUrl &url) {
+                m_updateVersion = version;
+                m_updateUrl = url;
+                emit updateVersionChanged();
+            });
     connect(&m_transfers, &models::TransferModel::activeCountChanged, this,
             [this] { setBusy(m_transfers.activeCount() > 0); });
 }
@@ -111,6 +148,8 @@ void AppController::start()
         setStatus(tr("Server URL is not configured. Set MODERNP2P_API or rebuild with P2P_API_BASE."));
         return;
     }
+
+    QTimer::singleShot(8000, this, [this] { m_updates.check(version()); });
 
     const Identity saved = Identity::load();
     if (saved.isValid() && CodeGenerator::isValid(saved.code))
@@ -162,11 +201,23 @@ void AppController::refreshInbox()
     m_client.fetchInbox([this](const ApiResult &r) {
         if (!r.ok())
             return;
-        const int before = m_requests.count();
-        m_requests.setAll(r.json.value(QStringLiteral("requests")).toArray());
-        if (m_requests.count() > before)
-            emit requestArrived();
+        for (const QJsonValue &v : r.json.value(QStringLiteral("requests")).toArray())
+            takeIncoming(v.toObject());
     });
+}
+
+bool AppController::takeIncoming(const QJsonObject &request)
+{
+    const QString id = request.value(QStringLiteral("id")).toString();
+    if (m_blocked.contains(request.value(QStringLiteral("from")).toString())) {
+        if (!id.isEmpty())
+            m_client.respond(id, false, [](const ApiResult &) {});
+        return false;
+    }
+    if (!m_requests.add(request))
+        return false;
+    emit requestArrived();
+    return true;
 }
 
 void AppController::onNotification(const QJsonObject &msg)
@@ -174,8 +225,7 @@ void AppController::onNotification(const QJsonObject &msg)
     const QString type = msg.value(QStringLiteral("type")).toString();
 
     if (type == QLatin1String("request")) {
-        if (m_requests.add(msg.value(QStringLiteral("request")).toObject()))
-            emit requestArrived();
+        takeIncoming(msg.value(QStringLiteral("request")).toObject());
     } else if (type == QLatin1String("response")) {
         const QString reqId = msg.value(QStringLiteral("requestId")).toString();
         const auto it = m_outgoing.find(reqId);
@@ -189,7 +239,7 @@ void AppController::onNotification(const QJsonObject &msg)
             return;
         }
         m_staging.clear();
-        m_engine.startSend(reqId, msg.value(QStringLiteral("peerId")).toString(), out.toCode, out.paths);
+        m_engine.startSend(reqId, msg.value(QStringLiteral("peerId")).toString(), out.toCode, out.paths, out.names);
     }
 }
 
@@ -207,9 +257,10 @@ void AppController::connectToPeer(const QString &rawCode)
 
     setStatus(tr("Looking up %1…").arg(code));
     const QStringList paths = m_staging.paths();
+    const QStringList names = m_staging.names();
     const QJsonArray files = m_staging.toJson();
 
-    m_client.lookup(code, [this, code, paths, files](const ApiResult &r) {
+    m_client.lookup(code, [this, code, paths, names, files](const ApiResult &r) {
         if (!r.ok())
             return setStatus(tr("Lookup failed: %1").arg(r.error));
         if (!r.json.value(QStringLiteral("exists")).toBool())
@@ -217,10 +268,10 @@ void AppController::connectToPeer(const QString &rawCode)
         if (!r.json.value(QStringLiteral("online")).toBool())
             return setStatus(tr("%1 is offline").arg(code));
 
-        m_client.sendRequest(code, files, [this, code, paths](const ApiResult &s) {
+        m_client.sendRequest(code, files, [this, code, paths, names](const ApiResult &s) {
             if (!s.ok())
                 return setStatus(tr("Request failed: %1").arg(s.error));
-            m_outgoing.insert(s.json.value(QStringLiteral("id")).toString(), {paths, code});
+            m_outgoing.insert(s.json.value(QStringLiteral("id")).toString(), {paths, names, code});
             setStatus(tr("Request sent to %1. Waiting for them to accept…").arg(code));
         });
     });
@@ -254,6 +305,45 @@ void AppController::rejectRequest(const QString &requestId)
     m_client.respond(requestId, false, [](const ApiResult &) {});
 }
 
+void AppController::blockRequest(const QString &requestId)
+{
+    const QJsonObject req = m_requests.take(requestId);
+    if (req.isEmpty())
+        return;
+    m_blocked.add(req.value(QStringLiteral("from")).toString());
+    m_client.respond(requestId, false, [](const ApiResult &) {});
+    setStatus(tr("Blocked %1").arg(req.value(QStringLiteral("from")).toString()));
+}
+
+void AppController::showInFolder(const QString &path)
+{
+    const QFileInfo fi(path);
+    if (!fi.exists())
+        return setStatus(tr("The file no longer exists"));
+#ifdef Q_OS_WIN
+    QProcess::startDetached(QStringLiteral("explorer.exe"),
+                            {QStringLiteral("/select,"), QDir::toNativeSeparators(fi.absoluteFilePath())});
+#else
+    QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
+#endif
+}
+
+void AppController::openLogFolder()
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(core::Logger::directory()));
+}
+
+void AppController::openUpdatePage()
+{
+    if (m_updateUrl.isValid())
+        QDesktopServices::openUrl(m_updateUrl);
+}
+
+QString AppController::version() const
+{
+    return QStringLiteral(P2P_VERSION);
+}
+
 void AppController::regenerateCode()
 {
     if (m_busy)
@@ -283,7 +373,7 @@ void AppController::addFiles(const QList<QUrl> &urls)
     }
     const int skipped = m_staging.addPaths(paths);
     if (skipped > 0)
-        setStatus(tr("Skipped %n item(s): only individual new files can be added", nullptr, skipped));
+        setStatus(tr("Skipped %n item(s): some items could not be added (duplicates, unreadable or too many)", nullptr, skipped));
 }
 
 void AppController::setDownloadDir(const QUrl &folder)

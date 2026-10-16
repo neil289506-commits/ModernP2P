@@ -23,6 +23,7 @@ QVariant TransferModel::data(const QModelIndex &index, int role) const
     case SpeedRole: return it.speed;
     case ErrorRole: return it.error;
     case ActiveRole: return active(it.state);
+    case PathRole: return it.path;
     default: return {};
     }
 }
@@ -31,7 +32,7 @@ QHash<int, QByteArray> TransferModel::roleNames() const
 {
     return {{IdRole, "transferId"}, {NameRole, "name"}, {SizeRole, "size"}, {DoneRole, "done"},
             {StateRole, "state"}, {SendingRole, "sending"}, {PeerRole, "peer"}, {SpeedRole, "speed"},
-            {ErrorRole, "error"}, {ActiveRole, "active"}};
+            {ErrorRole, "error"}, {ActiveRole, "active"}, {PathRole, "path"}};
 }
 
 int TransferModel::activeCount() const
@@ -80,8 +81,21 @@ void TransferModel::update(const QString &id, qint64 done, State state, double b
     it.error = error;
     const QModelIndex idx = index(i);
     emit dataChanged(idx, idx);
-    if (wasActive != active(state))
+    if (wasActive != active(state)) {
         emit activeCountChanged();
+        if (wasActive)
+            emit finished(it.name, it.size, it.sending, it.peer, stateText(state), it.error, it.path);
+    }
+}
+
+void TransferModel::setPath(const QString &id, const QString &path)
+{
+    const int i = indexOf(id);
+    if (i < 0)
+        return;
+    m_items[i].path = path;
+    const QModelIndex idx = index(i);
+    emit dataChanged(idx, idx, {PathRole});
 }
 
 bool TransferModel::isActive(const QString &id) const

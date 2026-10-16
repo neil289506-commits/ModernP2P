@@ -17,7 +17,7 @@ option(P2P_BUILD_SCREENSHOTS "Build the tool that renders README screenshots wit
 
 set(_qt_components Core Network WebSockets Test)
 if(P2P_BUILD_APP)
-    list(APPEND _qt_components Gui Qml Quick QuickControls2 WebChannel WebEngineCore)
+    list(APPEND _qt_components Gui Qml Quick QuickControls2 WebChannel WebEngineCore LinguistTools)
 endif()
 find_package(Qt6 ${P2P_QT_MIN} REQUIRED COMPONENTS ${_qt_components})
 qt_standard_project_setup()

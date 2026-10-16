@@ -37,6 +37,18 @@ private slots:
         QVERIFY(out.endsWith(".png"));
     }
 
+    void relativePathsAreReducedToSafeComponents()
+    {
+        QCOMPARE(sanitizeRelativePath("Album/sub/a.jpg"), (QStringList{"Album", "sub", "a.jpg"}));
+        QCOMPARE(sanitizeRelativePath("../../x/../y.txt"), (QStringList{"x", "y.txt"}));
+        QCOMPARE(sanitizeRelativePath("C:\\Windows\\a.dll"), (QStringList{"C_", "Windows", "a.dll"}));
+        QCOMPARE(sanitizeRelativePath("/abs//path/./f"), (QStringList{"abs", "path", "f"}));
+        QCOMPARE(sanitizeRelativePath("CON/aux.txt"), (QStringList{"_CON", "_aux.txt"}));
+        QVERIFY(sanitizeRelativePath("..").isEmpty());
+        QVERIFY(sanitizeRelativePath("").isEmpty());
+        QVERIFY(sanitizeRelativePath(QString("a/").repeated(40)).isEmpty());   // too deep
+    }
+
     void uniquePathAvoidsCollisions()
     {
         QTemporaryDir tmp;

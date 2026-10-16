@@ -62,6 +62,17 @@ ApplicationWindow {
         if (state === "Cancelled") return cAmber
         return cAccent
     }
+    function stateLabel(state) {
+        switch (state) {
+        case "Waiting": return qsTr("Waiting")
+        case "Transferring": return qsTr("Transferring")
+        case "Verifying": return qsTr("Verifying")
+        case "Done": return qsTr("Done")
+        case "Failed": return qsTr("Failed")
+        case "Cancelled": return qsTr("Cancelled")
+        }
+        return state
+    }
     function copyCode() {
         clipboardHelper.text = app.localCode
         clipboardHelper.selectAll()
@@ -82,6 +93,11 @@ ApplicationWindow {
         id: folderDialog
         title: qsTr("Download folder")
         onAccepted: app.setDownloadDir(selectedFolder)
+    }
+    FolderDialog {
+        id: folderPicker
+        title: qsTr("Choose a folder to send")
+        onAccepted: app.addFiles([selectedFolder])
     }
     FileDialog {
         id: fileDialog
@@ -220,6 +236,11 @@ ApplicationWindow {
             }
 
             AppButton {
+                text: qsTr("History")
+                subtle: true
+                onClicked: historyPopup.open()
+            }
+            AppButton {
                 text: qsTr("Folder")
                 subtle: true
                 onClicked: folderDialog.open()
@@ -234,6 +255,28 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: 24
         spacing: 16
+
+        Rectangle {
+            Layout.fillWidth: true
+            visible: app.updateVersion !== ""
+            Layout.preferredHeight: visible ? 52 : 0
+            radius: 12
+            color: Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.12)
+            border.color: Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.4)
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 8
+                Text {
+                    text: qsTr("Version %1 is available").arg(app.updateVersion)
+                    color: root.cText
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                AppButton { text: qsTr("Download"); primary: true; implicitHeight: 36; onClicked: app.openUpdatePage() }
+            }
+        }
 
         DropArea {
             id: drop
@@ -273,10 +316,11 @@ ApplicationWindow {
                         font.pixelSize: 22
                         font.weight: Font.Bold
                     }
-                    AppButton {
+                    Row {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Browse files…")
-                        onClicked: fileDialog.open()
+                        spacing: 10
+                        AppButton { text: qsTr("Browse files…"); onClicked: fileDialog.open() }
+                        AppButton { text: qsTr("Add folder…"); onClicked: folderPicker.open() }
                     }
                     Row {
                         Layout.alignment: Qt.AlignHCenter
@@ -314,7 +358,8 @@ ApplicationWindow {
                             font.weight: Font.Bold
                             Layout.fillWidth: true
                         }
-                        AppButton { text: qsTr("Add more"); subtle: true; onClicked: fileDialog.open() }
+                        AppButton { text: qsTr("Add files"); subtle: true; onClicked: fileDialog.open() }
+                        AppButton { text: qsTr("Add folder"); subtle: true; onClicked: folderPicker.open() }
                         AppButton { text: qsTr("Clear"); subtle: true; onClicked: app.clearStaging() }
                     }
                     ListView {
@@ -416,7 +461,7 @@ ApplicationWindow {
                                     font.pixelSize: 12
                                     font.family: "Consolas"
                                 }
-                                Chip { text: model.state; tone: row.tone }
+                                Chip { text: root.stateLabel(model.state); tone: row.tone }
                             }
                             Rectangle {
                                 Layout.fillWidth: true
@@ -441,15 +486,16 @@ ApplicationWindow {
                             }
                         }
                         AppButton {
-                            opacity: model.active ? 1 : 0
-                            enabled: model.active
-                            text: "✕"
+                            readonly property bool canShow: !model.sending && model.state === "Done" && model.path !== ""
+                            opacity: (model.active || canShow) ? 1 : 0
+                            enabled: model.active || canShow
+                            text: model.active ? "✕" : qsTr("Show")
                             subtle: true
-                            implicitWidth: 40
+                            implicitWidth: 64
                             leftPadding: 0; rightPadding: 0
-                            onClicked: app.cancelTransfer(model.transferId)
+                            onClicked: model.active ? app.cancelTransfer(model.transferId) : app.showInFolder(model.path)
                             ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Cancel")
+                            ToolTip.text: model.active ? qsTr("Cancel") : qsTr("Show in folder")
                         }
                     }
                 }
@@ -635,6 +681,7 @@ ApplicationWindow {
                         Text { text: model.names; color: root.cMuted; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
                         RowLayout {
                             Layout.topMargin: 4
+                            AppButton { text: qsTr("Block"); subtle: true; onClicked: app.blockRequest(model.requestId) }
                             Item { Layout.fillWidth: true }
                             AppButton { text: qsTr("Reject"); onClicked: app.rejectRequest(model.requestId) }
                             AppButton { text: qsTr("Accept"); primary: true; onClicked: app.acceptRequest(model.requestId) }
@@ -643,6 +690,133 @@ ApplicationWindow {
                 }
             }
             AppButton { text: qsTr("Close"); subtle: true; Layout.alignment: Qt.AlignRight; onClicked: requestsPopup.close() }
+        }
+    }
+
+    // ---- history and blocked codes -------------------------------------------
+    Popup {
+        id: historyPopup
+        objectName: "historyPopup"
+        property int tab: 0
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(root.width - 48, 660)
+        height: Math.min(root.height - 80, 540)
+        padding: 20
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle { radius: 18; color: root.cCard; border.color: root.cBorder }
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, root.dark ? 0.6 : 0.35) }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            RowLayout {
+                Text { text: qsTr("History"); color: root.cText; font.pixelSize: 19; font.weight: Font.Bold; Layout.fillWidth: true }
+                AppButton { text: qsTr("Transfers"); primary: historyPopup.tab === 0; subtle: historyPopup.tab !== 0; implicitHeight: 34; onClicked: historyPopup.tab = 0 }
+                AppButton { text: qsTr("Blocked"); primary: historyPopup.tab === 1; subtle: historyPopup.tab !== 1; implicitHeight: 34; onClicked: historyPopup.tab = 1 }
+            }
+
+            Text {
+                visible: historyPopup.tab === 0 && app.history.count === 0
+                text: qsTr("No transfers yet")
+                color: root.cMuted
+                font.pixelSize: 14
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 32
+            }
+            ListView {
+                visible: historyPopup.tab === 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: app.history
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: 64
+                    radius: 12
+                    color: root.dark ? "#1C2030" : "#F7F8FC"
+                    readonly property color tone: root.stateColor(model.result)
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 10
+                        spacing: 12
+                        Rectangle {
+                            width: 36; height: 36; radius: 18
+                            color: Qt.rgba(parent.parent.tone.r, parent.parent.tone.g, parent.parent.tone.b, 0.15)
+                            Text {
+                                anchors.centerIn: parent
+                                text: model.sending ? "↑" : "↓"
+                                color: parent.parent.parent.tone
+                                font.pixelSize: 18
+                                font.weight: Font.Bold
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text { text: model.name; color: root.cText; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            Text {
+                                text: (model.sending ? qsTr("to ") : qsTr("from ")) + model.peer + " · " + model.when + " · " + root.fmtSize(model.size)
+                                color: root.cMuted
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                        Chip { text: root.stateLabel(model.result); tone: parent.parent.tone }
+                        AppButton {
+                            visible: !model.sending && model.result === "Done" && model.path !== ""
+                            text: qsTr("Show")
+                            subtle: true
+                            implicitHeight: 34
+                            onClicked: app.showInFolder(model.path)
+                        }
+                    }
+                }
+            }
+
+            Text {
+                visible: historyPopup.tab === 1 && app.blocked.count === 0
+                text: qsTr("No blocked codes")
+                color: root.cMuted
+                font.pixelSize: 14
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 32
+            }
+            ListView {
+                visible: historyPopup.tab === 1
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: app.blocked
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: 52
+                    radius: 12
+                    color: root.dark ? "#1C2030" : "#F7F8FC"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 8
+                        Text { text: model.code; color: root.cText; font.family: "Consolas"; font.pixelSize: 16; font.weight: Font.Bold; font.letterSpacing: 1; Layout.fillWidth: true }
+                        AppButton { text: qsTr("Unblock"); implicitHeight: 34; onClicked: app.unblock(model.code) }
+                    }
+                }
+            }
+
+            RowLayout {
+                AppButton { text: qsTr("Open log folder"); subtle: true; onClicked: app.openLogFolder() }
+                AppButton { text: qsTr("Clear history"); subtle: true; visible: historyPopup.tab === 0 && app.history.count > 0; onClicked: app.clearHistory() }
+                Item { Layout.fillWidth: true }
+                Text { text: qsTr("Version %1").arg(app.version); color: root.cMuted; font.pixelSize: 12 }
+                AppButton { text: qsTr("Close"); onClicked: historyPopup.close() }
+            }
         }
     }
 }

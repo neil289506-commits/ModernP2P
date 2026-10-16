@@ -59,4 +59,26 @@ QString uniqueFilePath(const QDir &dir, const QString &fileName)
     return candidate;
 }
 
+QStringList sanitizeRelativePath(const QString &input)
+{
+    constexpr int kMaxDepth = 16;
+    QStringList out;
+    const QStringList raw = QString(input).replace(QLatin1Char('\\'), QLatin1Char('/')).split(QLatin1Char('/'));
+    for (const QString &part : raw) {
+        const QString trimmed = part.trimmed();
+        if (trimmed.isEmpty() || trimmed == QLatin1String(".") || trimmed == QLatin1String(".."))
+            continue;
+        out << sanitizeFileName(trimmed);
+    }
+    return out.size() > kMaxDepth ? QStringList{} : out;
+}
+
+QString uniqueDirName(const QDir &dir, const QString &name)
+{
+    QString candidate = name;
+    for (int n = 1; QFileInfo::exists(dir.filePath(candidate)); ++n)
+        candidate = QStringLiteral("%1 (%2)").arg(name).arg(n);
+    return candidate;
+}
+
 } // namespace p2p::core

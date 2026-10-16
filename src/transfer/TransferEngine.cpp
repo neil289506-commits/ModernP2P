@@ -1,6 +1,6 @@
 #include "TransferEngine.h"
 
-#include "PeerBridge.h"
+#include "PeerTransport.h"
 #include "core/FileNames.h"
 
 #include <QDir>
@@ -29,17 +29,17 @@ constexpr int kExpectedTtlMs = 10 * 60 * 1000;
 
 } // namespace
 
-TransferEngine::TransferEngine(PeerBridge *bridge, TransferModel *model, QObject *parent)
+TransferEngine::TransferEngine(PeerTransport *bridge, TransferModel *model, QObject *parent)
     : QObject(parent)
     , m_bridge(bridge)
     , m_model(model)
 {
-    connect(bridge, &PeerBridge::incomingConnection, this, &TransferEngine::onIncoming);
-    connect(bridge, &PeerBridge::connectionOpened, this, &TransferEngine::onOpened);
-    connect(bridge, &PeerBridge::connectionClosed, this, &TransferEngine::onClosed);
-    connect(bridge, &PeerBridge::connectionError, this, &TransferEngine::onError);
-    connect(bridge, &PeerBridge::messageReceived, this, &TransferEngine::onMessage);
-    connect(bridge, &PeerBridge::messageSent, this, &TransferEngine::onSent);
+    connect(bridge, &PeerTransport::incomingConnection, this, &TransferEngine::onIncoming);
+    connect(bridge, &PeerTransport::connectionOpened, this, &TransferEngine::onOpened);
+    connect(bridge, &PeerTransport::connectionClosed, this, &TransferEngine::onClosed);
+    connect(bridge, &PeerTransport::connectionError, this, &TransferEngine::onError);
+    connect(bridge, &PeerTransport::messageReceived, this, &TransferEngine::onMessage);
+    connect(bridge, &PeerTransport::messageSent, this, &TransferEngine::onSent);
 }
 
 void TransferEngine::report(const QString &tid, qint64 done, State state, QElapsedTimer &clock,
@@ -55,16 +55,17 @@ void TransferEngine::report(const QString &tid, qint64 done, State state, QElaps
 // ---------------------------------------------------------------- sending --
 
 void TransferEngine::startSend(const QString &reqId, const QString &peerId, const QString &toCode,
-                               const QStringList &paths)
+                               const QStringList &paths, const QStringList &names)
 {
     auto s = std::make_shared<OutSession>();
     s->cid = QStringLiteral("o%1").arg(++m_counter);
     s->reqId = reqId;
     s->peerCode = toCode;
     s->paths = paths;
-    for (const QString &path : paths) {
-        const QFileInfo fi(path);
-        const QString tid = m_model->add(fi.fileName(), fi.size(), true, toCode);
+    s->names = names;
+    for (int i = 0; i < paths.size(); ++i) {
+        const QFileInfo fi(paths.at(i));
+        const QString tid = m_model->add(names.value(i, fi.fileName()), fi.size(), true, toCode);
         s->tids << tid;
         m_tidToCid.insert(tid, s->cid);
     }
@@ -104,7 +105,7 @@ void TransferEngine::nextFile(OutSession &s)
     s.progress.start();
 
     post(s, QJsonObject{{QStringLiteral("t"), QStringLiteral("file")},
-                        {QStringLiteral("name"), QFileInfo(s.paths.at(s.idx)).fileName()},
+                        {QStringLiteral("name"), s.names.value(s.idx, QFileInfo(s.paths.at(s.idx)).fileName())},
                         {QStringLiteral("size"), static_cast<double>(s.file->size())}});
     m_model->update(s.tids.at(s.idx), 0, State::Transferring);
     pump(s);
@@ -231,8 +232,22 @@ void TransferEngine::handleIn(InSession &s, const QJsonObject &o)
         if (static_cast<qint64>(o.value(QStringLiteral("size")).toDouble(-1)) != spec.size)
             return failIn(s, QStringLiteral("File size does not match the request"));
 
-        // The name comes from the request the user accepted, never from the wire.
-        s.finalPath = core::uniqueFilePath(QDir(m_downloadDir), core::sanitizeFileName(spec.name));
+        // The name comes from the request the user accepted, never from the wire,
+        // and is reduced to safe path components below the download folder.
+        const QStringList parts = core::sanitizeRelativePath(spec.name);
+        if (parts.isEmpty())
+            return failIn(s, QStringLiteral("Invalid file name"));
+        const QDir base(m_downloadDir);
+        if (parts.size() == 1) {
+            s.finalPath = core::uniqueFilePath(base, parts.first());
+        } else {
+            QString &root = s.roots[parts.first()];
+            if (root.isEmpty())
+                root = core::uniqueDirName(base, parts.first());
+            const QString target = base.filePath(root + QLatin1Char('/') + parts.mid(1).join(QLatin1Char('/')));
+            QDir().mkpath(QFileInfo(target).absolutePath());
+            s.finalPath = core::uniqueFilePath(QFileInfo(target).dir(), QFileInfo(target).fileName());
+        }
         s.partPath = s.finalPath + QStringLiteral(".part");
         s.file = std::make_unique<QFile>(s.partPath);
         if (!s.file->open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -274,6 +289,7 @@ void TransferEngine::handleIn(InSession &s, const QJsonObject &o)
             problem = QStringLiteral("Cannot save file");
 
         if (problem.isEmpty()) {
+            m_model->setPath(tid, s.finalPath);
             m_model->update(tid, s.received, State::Done);
             reply(s, true);
         } else {

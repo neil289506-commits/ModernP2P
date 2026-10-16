@@ -11,7 +11,7 @@ class TransferModel : public QAbstractListModel
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
 public:
     enum Roles { IdRole = Qt::UserRole + 1, NameRole, SizeRole, DoneRole, StateRole, SendingRole,
-                 PeerRole, SpeedRole, ErrorRole, ActiveRole };
+                 PeerRole, SpeedRole, ErrorRole, ActiveRole, PathRole };
 
     enum class State { Waiting, Transferring, Verifying, Done, Failed, Cancelled };
 
@@ -27,15 +27,20 @@ public:
     void update(const QString &id, qint64 done, State state, double bytesPerSecond = 0,
                 const QString &error = {});
     bool isActive(const QString &id) const;
+    /// Where a received file ended up (shown as "Show in folder").
+    void setPath(const QString &id, const QString &path);
 
     static QString stateText(State s);
 
 signals:
     void activeCountChanged();
+    /// Emitted once when a transfer leaves the active states (done, failed or cancelled).
+    void finished(const QString &name, qint64 size, bool sending, const QString &peer,
+                  const QString &state, const QString &error, const QString &path);
 
 private:
     struct Item {
-        QString id, name, peer, error;
+        QString id, name, peer, error, path;
         qint64 size = 0, done = 0;
         bool sending = false;
         State state = State::Waiting;

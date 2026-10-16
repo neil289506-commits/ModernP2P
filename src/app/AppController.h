@@ -6,10 +6,13 @@
 #include <QUrl>
 
 #include "core/Identity.h"
+#include "models/BlockListModel.h"
+#include "models/HistoryModel.h"
 #include "models/RequestsModel.h"
 #include "models/StagingModel.h"
 #include "models/TransferModel.h"
 #include "network/CloudflareClient.h"
+#include "network/UpdateChecker.h"
 #include "transfer/PeerBridge.h"
 #include "transfer/TransferEngine.h"
 
@@ -27,6 +30,10 @@ class AppController : public QObject
     Q_PROPERTY(QObject *staging READ staging CONSTANT)
     Q_PROPERTY(QObject *requests READ requests CONSTANT)
     Q_PROPERTY(QObject *transfers READ transfers CONSTANT)
+    Q_PROPERTY(QObject *history READ history CONSTANT)
+    Q_PROPERTY(QObject *blocked READ blocked CONSTANT)
+    Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QString updateVersion READ updateVersion NOTIFY updateVersionChanged)
 public:
     explicit AppController(QObject *parent = nullptr);
 
@@ -38,12 +45,22 @@ public:
     QObject *staging() { return &m_staging; }
     QObject *requests() { return &m_requests; }
     QObject *transfers() { return &m_transfers; }
+    QObject *history() { return &m_history; }
+    QObject *blocked() { return &m_blocked; }
+    QString version() const;
+    QString updateVersion() const { return m_updateVersion; }
 
     /// Call once after the event loop is running.
     Q_INVOKABLE void start();
     Q_INVOKABLE void connectToPeer(const QString &rawCode);
     Q_INVOKABLE void acceptRequest(const QString &requestId);
     Q_INVOKABLE void rejectRequest(const QString &requestId);
+    Q_INVOKABLE void blockRequest(const QString &requestId);
+    Q_INVOKABLE void unblock(const QString &code) { m_blocked.remove(code); }
+    Q_INVOKABLE void clearHistory() { m_history.clear(); }
+    Q_INVOKABLE void showInFolder(const QString &path);
+    Q_INVOKABLE void openLogFolder();
+    Q_INVOKABLE void openUpdatePage();
     Q_INVOKABLE void regenerateCode();
     Q_INVOKABLE void cancelTransfer(const QString &transferId);
     Q_INVOKABLE void addFiles(const QList<QUrl> &urls);
@@ -58,9 +75,10 @@ signals:
     void busyChanged();
     void downloadDirChanged();
     void requestArrived();
+    void updateVersionChanged();
 
 private:
-    struct Outgoing { QStringList paths; QString toCode; };
+    struct Outgoing { QStringList paths, names; QString toCode; };
 
     void setStatus(const QString &text);
     void setOnline(bool online);
@@ -70,6 +88,8 @@ private:
     void startSession();
     void refreshInbox();
     void onNotification(const QJsonObject &msg);
+    /// Queues the request for the user, or rejects it silently if the sender is blocked.
+    bool takeIncoming(const QJsonObject &request);
 
     network::CloudflareClient m_client;
     transfer::PeerBridge m_bridge;
@@ -77,6 +97,11 @@ private:
     models::RequestsModel m_requests;
     models::TransferModel m_transfers;
     transfer::TransferEngine m_engine;
+    models::HistoryModel m_history;
+    models::BlockListModel m_blocked;
+    network::UpdateChecker m_updates;
+    QString m_updateVersion;
+    QUrl m_updateUrl;
 
     core::Identity m_identity;
     QString m_peerId;
