@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -23,5 +29,6 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          # 判斷如果是手動觸發就讀取 inputs.tag，如果是 Push Tag 則讀取 github.ref_name
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: gh release create "$TAG" ModernP2P-win64.zip --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
