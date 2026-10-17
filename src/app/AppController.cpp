@@ -3,6 +3,7 @@
 #include "core/CodeGenerator.h"
 #include "core/Logger.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -46,7 +47,7 @@ AppController::AppController(QObject *parent)
 {
     QSettings settings;
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
-        + QStringLiteral("/ModernP2P");
+        + QLatin1Char('/') + QCoreApplication::applicationName();
     m_engine.setDownloadDir(settings.value(QStringLiteral("downloadDir"), defaultDir).toString());
 
     connect(&m_client, &network::CloudflareClient::notification, this, &AppController::onNotification);
@@ -337,6 +338,12 @@ void AppController::openUpdatePage()
 {
     if (m_updateUrl.isValid())
         QDesktopServices::openUrl(m_updateUrl);
+}
+
+QString AppController::profile() const
+{
+    const QString name = QCoreApplication::applicationName();
+    return name.startsWith(QLatin1String("ModernP2P-")) ? name.mid(10) : QString();
 }
 
 QString AppController::version() const

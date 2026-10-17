@@ -1,3 +1,4 @@
+#include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QLocale>
@@ -7,9 +8,11 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QRegularExpression>
 #include <QTimer>
 
 #include "app/AppController.h"
+#include "app/SelfTest.h"
 #include "core/Logger.h"
 
 int main(int argc, char *argv[])
@@ -20,7 +23,29 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("ModernP2P"));
+
+    // Command line: --profile <name> runs an independent copy (own code, settings,
+    // history and download folder) so two instances can talk to each other on one PC.
+    // --selftest [--selftest-out=<file>] runs the automated end-to-end check and exits.
+    QString profile = qEnvironmentVariable("MODERNP2P_PROFILE");
+    QString selftestOut;
+    bool selftest = false;
+    const QStringList args = app.arguments();
+    for (int i = 1; i < args.size(); ++i) {
+        if (args.at(i) == QLatin1String("--profile") && i + 1 < args.size())
+            profile = args.at(++i);
+        else if (args.at(i).startsWith(QLatin1String("--profile=")))
+            profile = args.at(i).mid(10);
+        else if (args.at(i) == QLatin1String("--selftest"))
+            selftest = true;
+        else if (args.at(i).startsWith(QLatin1String("--selftest-out=")))
+            selftestOut = args.at(i).mid(15);
+    }
+    if (!QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]{1,16}$")).match(profile).hasMatch())
+        profile.clear();
+
+    QGuiApplication::setApplicationName(profile.isEmpty() ? QStringLiteral("ModernP2P")
+                                                           : QStringLiteral("ModernP2P-") + profile);
     QGuiApplication::setOrganizationName(QStringLiteral("ModernP2P"));
     p2p::core::Logger::install(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
                                + QStringLiteral("/logs"));
@@ -34,6 +59,15 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/icon.png")));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    if (selftest) {
+        if (selftestOut.isEmpty())
+            selftestOut = QDir::temp().filePath(QStringLiteral("modernp2p-selftest.txt"));
+        QTimer::singleShot(0, &app, [&app, selftestOut] {
+            app.exit(p2p::app::runSelfTest(selftestOut, p2p::app::compiledApiBase()));
+        });
+        return app.exec();
+    }
 
     p2p::app::AppController controller;
 

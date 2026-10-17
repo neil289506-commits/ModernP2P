@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 780
     minimumHeight: 540
     visible: true
-    title: "ModernP2P"
+    title: app.profile !== "" ? "ModernP2P · " + app.profile : "ModernP2P"
     color: cBg
 
     // ---- theme -----------------------------------------------------------

@@ -24,6 +24,7 @@ if(P2P_BUILD_APP)
         network/UpdateChecker.cpp network/UpdateChecker.h
         transfer/PeerBridge.cpp transfer/PeerBridge.h
         app/AppController.cpp app/AppController.h
+        app/SelfTest.cpp app/SelfTest.h
     )
 
     qt_add_qml_module(ModernP2P
@@ -35,7 +36,7 @@ if(P2P_BUILD_APP)
     # PeerJS host page and the vendored PeerJS build, served from qrc:/web/.
     qt_add_resources(ModernP2P web
         PREFIX "/web"
-        BASE ${CMAKE_SOURCE_DIR}
+        BASE ${CMAKE_SOURCE_DIR}/web
         FILES
             ${CMAKE_SOURCE_DIR}/web/bridge.html
             ${CMAKE_SOURCE_DIR}/web/bridge.js

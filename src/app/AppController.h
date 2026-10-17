@@ -33,6 +33,7 @@ class AppController : public QObject
     Q_PROPERTY(QObject *history READ history CONSTANT)
     Q_PROPERTY(QObject *blocked READ blocked CONSTANT)
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QString profile READ profile CONSTANT)
     Q_PROPERTY(QString updateVersion READ updateVersion NOTIFY updateVersionChanged)
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -48,6 +49,8 @@ public:
     QObject *history() { return &m_history; }
     QObject *blocked() { return &m_blocked; }
     QString version() const;
+    /// Name given with --profile (empty for the normal instance).
+    QString profile() const;
     QString updateVersion() const { return m_updateVersion; }
 
     /// Call once after the event loop is running.

@@ -20,6 +20,11 @@ public:
     explicit PeerBridge(QObject *parent = nullptr);
     ~PeerBridge() override;
 
+    /// Signalling server override from MODERNP2P_PEERJS ("host:port[/path]", optionally with
+    /// http:// or https://). Empty object means the public PeerJS server.
+    static QJsonObject signallingFromEnvironment();
+    void setSignalling(const QJsonObject &options) { m_signalling = options; }
+
     void start(const QString &peerId);
     void reconnectSignaling();
     void connectTo(const QString &cid, const QString &remotePeerId, const QJsonObject &metadata) override;
@@ -49,6 +54,7 @@ private:
     QWebEngineProfile *m_profile = nullptr;
     QWebEnginePage *m_page = nullptr;
     QWebChannel *m_channel = nullptr;
+    QJsonObject m_signalling;
     bool m_ready = false;
     QStringList m_pending;
 };

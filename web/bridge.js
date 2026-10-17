@@ -38,12 +38,14 @@
   }
 
   window.bridge = {
-    start(peerId) {
+    // `optionsJson` may override the signalling server (host, port, path, secure).
+    start(peerId, optionsJson) {
       if (peer && !peer.destroyed) peer.destroy();
-      peer = new Peer(peerId, {
+      const extra = optionsJson ? JSON.parse(optionsJson) : {};
+      peer = new Peer(peerId, Object.assign({
         debug: 0,
         config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
-      });
+      }, extra));
       peer.on("open", (id) => host.jsPeerOpen(id));
       peer.on("disconnected", () => host.jsPeerDisconnected());
       peer.on("error", (e) => host.jsPeerError(String(e.type) + ": " + String(e.message)));

@@ -39,6 +39,7 @@ class MockApp : public QObject
     Q_PROPERTY(QObject *history MEMBER m_history CONSTANT)
     Q_PROPERTY(QObject *blocked MEMBER m_blocked CONSTANT)
     Q_PROPERTY(QString version MEMBER m_version CONSTANT)
+    Q_PROPERTY(QString profile MEMBER m_profile CONSTANT)
     Q_PROPERTY(QString updateVersion MEMBER m_updateVersion CONSTANT)
 public:
     QString m_code = QStringLiteral("K7M2QX9P");
@@ -53,6 +54,7 @@ public:
     QObject *m_blocked = nullptr;
     QString m_version = QStringLiteral("0.1.0");
     QString m_updateVersion;
+    QString m_profile;
 
 signals:
     void requestArrived();

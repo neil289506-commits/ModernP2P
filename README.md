@@ -146,6 +146,19 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=2 \
 
 The server URL can be overridden at runtime with the `MODERNP2P_API` environment variable.
 
+## Trying it on one computer
+
+You do not need a second PC. Run two independent copies side by side:
+
+```bat
+ModernP2P.exe --profile A
+ModernP2P.exe --profile B
+```
+
+(or double-click `two-instances.bat` from the zip). Each profile has its own code, history, block
+list and download folder (`Downloads\ModernP2P-A`, `...-B`), and the window title shows the profile.
+Drop a file into **A**, type **B**'s code and press **Send**, then accept it in **B**.
+
 ## Testing
 
 - `ctest`: code generation, file-name and path sanitising, models, history/block list persistence,
@@ -153,8 +166,16 @@ The server URL can be overridden at runtime with the `MODERNP2P_API` environment
   folders, corrupted chunk, wrong size, oversize data, path traversal, wrong peer, unknown request,
   cancel, completion signals).
 - `worker`: `npm test` covers validation and limits; `npm run typecheck` checks the Worker.
-- Not covered: the real PeerJS/WebRTC path between two machines and the Worker's Durable Object
-  routes (they are type-checked and deployed by CI, but not exercised by automated tests).
+- **End-to-end self-test**: `ModernP2P.exe --selftest [--selftest-out=result.txt]` runs two complete
+  devices in one process over the real network: claim codes on the Worker, register with PeerJS, send
+  a request, receive the WebSocket notification, accept, transfer 3 MB plus a folder over WebRTC and
+  compare the bytes. CI runs it on every build (non-blocking, since it depends on third-party
+  services). It needs `API_BASE_URL` for the Worker part; without it only the PeerJS/WebRTC part runs.
+- Self-hosting / offline: set `MODERNP2P_PEERJS=host:port[/path]` (optionally `http://` or `https://`)
+  to use your own PeerJS server (`npx peer --port 9000`) and `MODERNP2P_API=http://127.0.0.1:8787` to
+  point at a local `wrangler dev`. The whole self-test was run locally this way.
+- Not covered by automated tests: the interaction of the QML UI with a real window (copy button,
+  file dialogs).
 
 ## Limitations
 
