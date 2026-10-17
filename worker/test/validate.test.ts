@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isValidCode, isValidPeerIdFor, parseFiles, sha256Hex, timingSafeEqual } from "../src/validate";
+import {
+  MAX_FILES,
+  isValidCode,
+  isValidPeerIdFor,
+  parseFiles,
+  requestFits,
+  sha256Hex,
+  timingSafeEqual,
+} from "../src/validate";
 
 describe("codes", () => {
   it("accepts 8 uppercase alphanumerics only", () => {
@@ -26,7 +34,23 @@ describe("parseFiles", () => {
     expect(parseFiles([{ name: "", size: 1 }])).toBeNull();
     expect(parseFiles([{ name: "a", size: -1 }])).toBeNull();
     expect(parseFiles([{ name: "a", size: 1.5 }])).toBeNull();
-    expect(parseFiles([{ name: "x".repeat(256), size: 1 }])).toBeNull();
+    expect(parseFiles([{ name: "x".repeat(513), size: 1 }])).toBeNull();
+  });
+});
+
+describe("folders", () => {
+  it("accepts relative paths", () => {
+    expect(parseFiles([{ name: "Album/sub/a.jpg", size: 5 }])).not.toBeNull();
+  });
+  it("limits the number of files", () => {
+    const many = Array.from({ length: MAX_FILES + 1 }, (_, i) => ({ name: `f${i}`, size: 1 }));
+    expect(parseFiles(many)).toBeNull();
+    expect(parseFiles(many.slice(0, MAX_FILES))).not.toBeNull();
+  });
+  it("keeps one request well below the Durable Object value limit", () => {
+    const longNames = Array.from({ length: MAX_FILES }, (_, i) => ({ name: "d/".repeat(100) + i, size: 1 }));
+    expect(requestFits(longNames)).toBe(false);
+    expect(requestFits([{ name: "a.txt", size: 1 }])).toBe(true);
   });
 });
 

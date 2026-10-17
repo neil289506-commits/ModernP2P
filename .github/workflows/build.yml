@@ -59,6 +59,7 @@ jobs:
           try {
             New-Item -ItemType Directory -Force dist/ModernP2P | Out-Null
             Copy-Item build/Release/ModernP2P.exe dist/ModernP2P/
+            Copy-Item scripts/two-instances.bat dist/ModernP2P/
             $log = & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir src/qml dist/ModernP2P/ModernP2P.exe 2>&1
             if ($LASTEXITCODE -ne 0) { throw "windeployqt failed: $($log | Select-Object -Last 5)" }
             Compress-Archive -Path dist/ModernP2P -DestinationPath ModernP2P-win64.zip
@@ -76,3 +77,19 @@ jobs:
           name: ModernP2P-win64
           path: ModernP2P-win64.zip
           if-no-files-found: error
+
+      # Real-network check of the packaged app: two devices in one process claim codes on the
+      # Worker (when API_BASE_URL is set), register with the public PeerJS server and transfer
+      # files over WebRTC. Non-blocking because it depends on third-party services.
+      - name: End-to-end self-test
+        continue-on-error: true
+        run: |
+          $out = Join-Path $PWD 'selftest.txt'
+          $p = Start-Process -FilePath dist/ModernP2P/ModernP2P.exe -ArgumentList '--selftest',"--selftest-out=$out" -PassThru
+          if (-not $p.WaitForExit(240000)) { $p.Kill(); Write-Host "::error::self-test timed out" }
+          if (Test-Path $out) {
+            Get-Content $out | ForEach-Object {
+              if ($_ -like 'FAIL*' -or $_ -like 'RESULT: FAILED*') { Write-Host "::error::$_" } else { Write-Host "::notice::$_" }
+            }
+          } else { Write-Host "::error::the self-test produced no output" }
+          if ($p.ExitCode -ne 0) { exit 1 }

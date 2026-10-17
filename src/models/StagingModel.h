@@ -24,12 +24,17 @@ public:
     int count() const { return static_cast<int>(m_items.size()); }
     qint64 totalSize() const;
 
-    /// Adds regular files; returns how many were skipped (folders, duplicates, unreadable).
+    static constexpr int kMaxFiles = 2000;   // keep in sync with MAX_FILES in worker/src/validate.ts
+
+    /// Adds files and, recursively, the files inside folders (announced as
+    /// "Folder/sub/file"). Returns how many items were skipped (duplicates,
+    /// unreadable, symlinks, or beyond kMaxFiles).
     int addPaths(const QStringList &paths);
     void removeAt(int row);
     void clear();
 
     QStringList paths() const;
+    QStringList names() const;   ///< announced (relative) names, same order as paths()
     QJsonArray toJson() const;   ///< [{name,size}]
 
 signals:

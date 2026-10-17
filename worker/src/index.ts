@@ -1,7 +1,7 @@
 import { CodeRegistry } from "./registry";
 import { isLimited } from "./ratelimit";
 import type { Env } from "./types";
-import { REQUEST_ID_RE, isValidCode, parseFiles } from "./validate";
+import { REQUEST_ID_RE, isValidCode, parseFiles, requestFits } from "./validate";
 
 export { CodeRegistry };
 
@@ -74,6 +74,7 @@ export default {
       const body = (await request.json().catch(() => null)) as { files?: unknown } | null;
       const files = parseFiles(body?.files);
       if (!files) return err("invalid files", 400);
+      if (!requestFits(files)) return err("request too large", 413);
 
       const verify = await call(env, from, "/verify", { headers: authHeaders(request) });
       if (!verify.ok) return err("sender not authorized", 401);

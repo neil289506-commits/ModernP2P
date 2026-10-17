@@ -1,5 +1,6 @@
 #include "StagingModel.h"
 
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QJsonObject>
 
@@ -39,18 +40,33 @@ qint64 StagingModel::totalSize() const
 int StagingModel::addPaths(const QStringList &paths)
 {
     int skipped = 0;
-    for (const QString &p : paths) {
-        const QFileInfo fi(p);
+
+    auto add = [&](const QFileInfo &fi, const QString &name) {
         bool duplicate = false;
         for (const Item &it : std::as_const(m_items))
             duplicate = duplicate || it.path == fi.absoluteFilePath();
-        if (!fi.isFile() || !fi.isReadable() || duplicate) {
+        if (duplicate || fi.isSymLink() || !fi.isFile() || !fi.isReadable() || m_items.size() >= kMaxFiles) {
             ++skipped;
-            continue;
+            return;
         }
         beginInsertRows({}, static_cast<int>(m_items.size()), static_cast<int>(m_items.size()));
-        m_items.append({fi.absoluteFilePath(), fi.fileName(), fi.size()});
+        m_items.append({fi.absoluteFilePath(), name, fi.size()});
         endInsertRows();
+    };
+
+    for (const QString &p : paths) {
+        const QFileInfo fi(p);
+        if (fi.isDir() && !fi.isSymLink()) {
+            const QDir root(fi.absoluteFilePath());
+            QDirIterator it(root.absolutePath(), QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
+                            QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                it.next();
+                add(it.fileInfo(), fi.fileName() + QLatin1Char('/') + root.relativeFilePath(it.filePath()));
+            }
+        } else {
+            add(fi, fi.fileName());
+        }
     }
     emit countChanged();
     return skipped;
@@ -81,6 +97,14 @@ QStringList StagingModel::paths() const
     QStringList out;
     for (const Item &it : m_items)
         out << it.path;
+    return out;
+}
+
+QStringList StagingModel::names() const
+{
+    QStringList out;
+    for (const Item &it : m_items)
+        out << it.name;
     return out;
 }
 

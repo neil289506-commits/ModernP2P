@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env, TransferRequest } from "./types";
-import { isValidPeerIdFor, parseFiles, randomHex, sha256Hex, timingSafeEqual } from "./validate";
+import { isValidPeerIdFor, parseFiles, randomHex, requestFits, sha256Hex, timingSafeEqual } from "./validate";
 
 interface Owner {
   tokenHash: string;
@@ -10,7 +10,7 @@ interface Owner {
 
 const REQUEST_TTL_MS = 10 * 60 * 1000;
 const CLAIM_TTL_MS = 90 * 24 * 3600 * 1000;
-const MAX_PENDING = 50;
+const MAX_PENDING = 10;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -134,6 +134,7 @@ export class CodeRegistry extends DurableObject<Env> {
     if (!body || !files || typeof body.from !== "string" || !isValidPeerIdFor(body.fromPeerId, body.from)) {
       return err("invalid request", 400);
     }
+    if (!requestFits(files)) return err("request too large", 413);
     const list = await this.pending();
     if (list.filter((r) => r.status === "pending").length >= MAX_PENDING) return err("inbox full", 429);
 
